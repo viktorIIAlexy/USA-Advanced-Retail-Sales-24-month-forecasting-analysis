@@ -354,12 +354,12 @@ By applying this second comparative performance forecast strategy, I observed th
 # 5. Make the forecast for the next 2 years
   
   Finally, we will make our forecast for the next 24 months, with the most accurate and performance model. Based on our analysis we chose the NN model.
-```{r, setup, include=FALSE}
+```{r, setup, include=TRUE}
 knitr::opts_chunk$set(echo = TRUE)
-NN <- nnetar(RSXFSNtimeseries, lambda="auto", decay=0.5, maxit=150)
-facst <- forecast(NN, lambda="auto", h=24)
-autoplot(facst, include = 60)
-print(summary(fcast))
+NN <- nnetar(RSXFSNtimeseries, lambda="auto")
+fcast2 <- forecast(NN, h=24, PI=TRUE, npaths=100)
+autoplot(fcast2, include = 60)
+print(summary(fcast2))
 ```
 # 6. Conclusion
 This analysis compares the performance of some principal forecasting models used across different industries including one recently added neural network model. All details can potentially have a major impact on the forecast and on the decision made by a company. The accurate forecast will optimize the growth potential of any company.    
