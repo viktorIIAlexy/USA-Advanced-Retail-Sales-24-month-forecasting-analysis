@@ -1,0 +1,368 @@
+---
+title: "USA Advanced Retail Sales 24 month forecasting analysis"
+author: "Viktor Alexy"
+date: '2018-08-21'
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+# Analysis objective
+  This analysis has an objective to forecast the USA Advanced Retail Sales per day for the next 24 month from the last available data in 2018. Based on monthly USA Advanced Retail Sales, these time series cumulate from 1992 to the latest 2018 available data. 
+  
+  This analysis could be particularly relevant for medium and large MNE's who make their sales and procurement forecast based on this advanced economics index. Our time series is a conventional univariate time series with two columns, date and daily sales. The step applied in this analysis can be used in any forecast analysis.
+  
+# Preparative pre R upload  
+  Before we upload the data in R, with Excel, we transformed data from USA monthly sales to daily sales, and we adjusted the sales to have those in constant 2018 dollars. We plan using judgemental adjustment forecasting analysis approach. We will start this analysis with preliminary data observations.
+  
+# Models used: explanation  
+  We plan to use three classic forecasting models(Seasonal naïve, Exponential smoothing, ARIMA) and experienced one neural network model Seasonal naïve model.
+
+  In this forecast analysis approach, we gradually increase the complexity level of the models that we used. 
+
+  The first more basics models applied is the Seasonal Naive model, which can perform if the data are highly seasonal. The seasonal naive model makes the forecast using the last value from the same season, for example, the year before to forecast the value for the next year.
+
+  The second model applied is the exponentials state smoothing method by using ETS model who refer to error, trend and seasonality. This model can perform better in a short-term and on a univariate time series forecast. The model uses the exponentially weighted moving average (EWMA) to “smooth” a time series and trying to eliminate the random effect. The model uses a smoothing constant (a) which is transformed into a damping factor (1-a), the constant (a) define the weight which is applied to each period. ETS model can be applied as additive or multiplicative, but R selects the most optimal.
+
+  The third model applied is the autoregressive integrated moving average (ARIMA), which is fares a way more complex model than the two previous models mainly because of the algorithm which backed this forecast model in R. ARIMA is the combination of two models. First, autoregressive model AR(p), which forecast the variable of interest using a linear combination of past values of the variable, where (p) is the lag number. Second, moving average models MA(q), which is applied as a linear regression of the current value of the series against current and previous white noise error terms or random shocks. 
+
+  The fourth model applied, are neural network models (NN), which is the most complex model used in this analysis. This NN model performs in nonlinear time series and with big data sets. Because we have a significant shock in our data due to the 2008 market crash, we decided to test the predictive capacity of this model. The NN model is organised in multiples layers, the simplest networks contain no hidden layers and are equivalent to linear regressions. The coefficients attached to these predictors are called “weights”. The forecasts are obtained by a linear combination of the inputs. The weights are selected in the neural network framework by using a “learning algorithm”.
+
+# Analysis outline
+
+Preliminary data manipulation: On Excel, we compute the sales per day and adjust in 2018 dollars to cancelled the inflation impact on sales.
+
+1. Install R packages, load the data and declare this data series as a time series.
+2. Preliminary data observations
+3. Data decomposition:
+  Stationarity and identify lag specification,
+  Seasonal component, 
+  Cycle component,
+  Trend component. 
+
+4. Finding the most accurate model 
++ 4.1. Seasonal Naive method
++ 4.2. ETS method, exponential smouthing models
++ 4.3. ARIMA model
++ 4.4. Neural network model
+5. Make the forecast for the next 24 months.
+6. Conclusion
+7. Create a report with Markdown
+
+# 1. Package uploaded for this analysis
+
+```{r, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls())
+library(fpp2)
+library(readxl)
+library(tseries)
+library(forecast)
+library(ggplot2)
+library(ggfortify)
+library(texPreview)
+library(rmarkdown)
+setwd("/Users/viktoralexy/Desktop/Rproject/git_project")
+RSXFSN <- read.csv("RSXFSN_Z.csv")
+RSXFSNtimeseries <- ts(RSXFSN[,2], start = c(1992,1), frequency = 12)
+
+```
+  
+# 2. Data Observarions
+  First, we will graph this time series, where the main goal will be to observes some specific characteristics. Second, we will identify the magnitude of characteristics as stationarity, seasonality and any visible shock or trend.   
+
+## Time Plot
+```{r, echo=FALSE }
+autoplot(RSXFSNtimeseries) +
+  ggtitle("Time Plot: Real US retail Sales Per day") +
+  ylab("Million of 2018 Dollars")
+
+```
+  
+  
+  We observe that these univariate time series had a strong positive trend and it appear that there is a presence of seasonality. While it looks like there is one shock in 2008 which is potentially related to the subprime market crash. Even though, in this first observation, we can intuitively conclude that these time series have no stationary. In the next section, we will investigate and identify those potential problems in the way to make some correction to this time series and for selecting the most appropriate forecasting model.
+
+# 3. Preliminary data decomposition
+
+#### We will investigate Stationarity test (unit root test)
+
+  We will make the Dickey-Fuller Test to check the stationnarity in the datas.
+
+```{r, echo=TRUE}
+adf.test(RSXFSNtimeseries, alternative = "stationary", k=12) 
+```
+    
+  The p-value can not allow you to reject the null hypothesis of non-stationarity. This test confirmed that this series is not stationary.
+
+  To correct the non-stationarity problem, we apply the first difference and make again the Dickey-Fuller.
+
+```{r, echo=TRUE}
+DS <- diff(RSXFSNtimeseries)
+adf.test(DS, alternative = "stationary", k=12)
+```
+    
+  Now the Dickey-Fuller test allows you to reject the null hypothesis with this small p-value and we can conclude this series is stationary. By taking the first difference, we make the correction on this initial non-stationary time series. 
+
+ We can visualize the data, for seeing the impact of the first difference on this time series.  
+```{r, echo=FALSE}
+autoplot(DS) +
+  ggtitle("Time Plot: Change in Real US retail Sales Per day") +
+  ylab("Million of 2018 Dollars")
+```
+         
+  We will take the first difference from the data to remove the trend. With this first difference, we can work with this time series without having the trend influence our forecasting project. 
+  
+  There are two mains reasons for why we need to have stationary:
+One is just because tools used in time series analysis and forecasting assume stationarity
+  
+  1. When building models to forecast time series data (like ARIMA), we start by differencing the data (calculating sequentially 𝑥𝑡−𝑥𝑡−1 until we get to a point where the series is stationary. Models account for oscillations but not for trends, and therefore, accounting for trends by differencing allows us to use the models that account for oscillations.
+  
+  2. Also, It's important because it helps to identify the driving factors. When we detect a change in a time series, we may be able to infer a correlation. But we need both time series to be stationary (no trend and no seasonality), otherwise, the correlation we find will be misleading.
+ 
+## We will investigate Autocorrelation in the datas
+  Autocorrelation measures the linear relationship between lagged values of a time series. We will see dependence in the data across a range of lag value.  
+
+```{r, echo=FALSE}
+#ACF or use othe graph
+acf(RSXFSNtimeseries, lag.max = 30,
+    type = c("correlation", "covariance", "partial"),
+    plot = TRUE, na.action = na.fail, demean = TRUE)
+```
+    
+  This graphic shows that the data are strongly non-random and further suggests that an autoregressive model might be appropriate.  
+
+## We will investigate seasonality.
+
+Seasonality is a pattern which occurs when a time series is affected by seasonal factors such as the time of the year or the day of the week. We will use two different visualization graph to identify the seasonality. 
+
+```{r pressure, echo=FALSE}
+ggseasonplot(DS) +
+  ggtitle("Seasonal Plot: Change in daily US retail Sales") +
+  ylab("Million of 2018 Dollars")
+```
+  
+  We can observe that those 27 multiples colour lines, already have the same pattern over the years. Those colour lines informed you of the possible presence of seasonal cycles in this time series. 
+
+  Now, look at this other seasonal plot which isolates the variation for one month at the time.
+    
+```{r, echo=FALSE}
+ggsubseriesplot(DS) +
+  ggtitle("Seasonal Plot: Change in daily US retail Sales") +
+  ylab("Million of 2018 Dollars")
+```
+    
+  The horizontal lines indicate the means for each month. This form of plot enables the underlying seasonal pattern to be seen clearly, and also shows the changes in seasonality over time. It is especially useful in identifying changes within particular seasons.  
+
+## We will investigate trend.
+
+   The trend exists when there is a long-term increase or decrease in the data, while it informed you on the direction. 
+   We will decompose the data series using a moving average of order m = 11.
+  $$\hat{T}_t=\frac{1}{m}\sum_{j=-k}^n y_{t+j},   $$
+```{r, echo=FALSE}
+RSXFSNMA11 <- ma(RSXFSNtimeseries,order=11)
+plot(RSXFSNMA11)
+```
+  
+  After this first analysis, we observed that our time series, has a positive trend, are affected by some seasonality and are affected by autocorrelation. While the series is affected by a shock around years 2008, which can also be interpreted as the end of a cycle.
+  
+# 4. In this next step, we will try to find the most accurate model
+Forecast with various models: we will use a benchmark method to forecast.
+
+## 4.1 Fit with seasonal naive method
+  First, let's use the seasonal naïve method as our benchmark.
+  
+  This model using the most recent observation as a forecast, which is the most basic forecasting model. Because a naïve forecast is optimal when data follow a random walk, these are also called random walk forecasts. Because we observe seasonality in those data, we will apply the seasonal naïve model useful for highly seasonal data, like we have where (m) are the seasonal period. 
+  
+  $$\hat{y}_{T+h|T}=y_{T+h-m(k+1)}   $$
+
+```{r, echo=TRUE}
+fit_SN <- snaive(DS)
+checkresiduals(fit_SN)
+```
+  
+  We have a residual standard error (residual) = 290.55, what mean for the exact month the years before, which missing on average 290.55 million
+  
+  The ACF graf shows us that we have autocorrelation in the residual so the model, is not a good predictive model. Residual interpretation:
+  The forecasts from a model with autocorrelated errors are still unbiased, and so are not wrong, but they will usually have larger prediction intervals than they need to. Therefore we should always look at an ACF plot of the residuals.
+
+  The Ljung-Box test helps us for the autocorrelation analysis. The test tries to reject the independence of some values. 
+  
+  Test results interpretation: 
+If the p-value is larger than 0.05 we don't have enough statistical evidence to reject the null hypothesis. So, with the seasonal naïve method we can not assume that your values are dependent.
+
+##### Discussion
+The naive and Snaive model is fundamental models. Some business uses those model basic forecasting models, maybe because of the lack of internal resources. Producing or maintaining extra stock it is a cost for the company and creates inefficiency. We continue testing the forecast performance of others models.  
+
+## 4.2. Fit ETS method, exponential smoothing method
+  Second, we will apply ETS model: Error, Trend, Seasonal. The flexibility of the ETS model lies in its ability to trend and seasonal components of different traits. This function ets() automatically optimizes the choice of model and necessary parameters. We present the structure of the additive and the multiplicative form.    
+  
+Assuming: 
+  $$\mu_t = \hat{y}_t=l_{t-1}+ b_{t-1}  $$
+  and
+  $$ \varepsilon_t = y_{t} - \mu_{t}  $$
+ETS additive
+  $$ y_t =  l_{t-1} + \phi b_{t-1} + \varepsilon_t   $$
+  $$ l_t =  l_{t-1} + \phi b_{t-1} + \alpha\varepsilon_t   $$
+  $$ b_t =  \phi b_{t-1} + \beta^*(l_{t}-l_{t-1}- \phi b_{t-1} = \phi b_{t-1}+\alpha\beta^*\varepsilon_t   $$
+ETS multiplcative
+Assuming:
+ $$\varepsilon_t = (y_t-\mu_t ) / \mu_t  $$
+ $$ y_t =  (l_{t-1} + \phi b_{t-1}) (1+\varepsilon_t)   $$
+ $$ l_t =  (l_{t-1} + \phi b_{t-1}) (1+\alpha\varepsilon_t)   $$
+  $$ b_t = \phi b_{t-1}+\beta(l_{t-1} + \phi b_{t-1})\varepsilon_t  $$
+```{r, echo=TRUE}
+fit_ets <- ets(RSXFSNtimeseries) #residual = 221.1631
+checkresiduals(fit_ets)
+```
+  
+  We have a residual sd = 215.22, which are more accurate than the seasonal naïve models and what mean for the exact month the years before, which missing on average 215.20 million.
+  
+  So this model increases the precision and offer a better fit but: if we look to AFC graph, we observe that there remains autocorrelation because of the bar going out of the 95% confidence permutated bleu line.
+
+  The Ljung-Box test
+  Test results interpretation: 
+This p-value can not allow you to assume that there are independent in (e). 
+
+##### Discussion
+We realize that with using just a bit more complex forecasting model, we increase accuracy and can make a significant cost savings to any company. We continue our analysis with a one of the most performant forecasting model the ARIMA.
+
+## 4.3. Fit on ARIMA model
+  ARIMA model is a Generalized random walk model which is fine-tuned to eliminate all residual autocorrelation. It is a Generalized exponential smoothing model that can incorporate long-term trends and seasonality.
+
+AR(p) model
+$$  (1-\sum^p_{k=1}\alpha_kL^k)X_t = \varepsilon_t  $$
+MA(q) model
+$$  X_t = (1+\sum^q_{k=1}\beta_kL^k)\varepsilon_t  $$
+Integration, the first difference operator, delta, is defined as:
+$$\Delta X_t=X_t -X_{t-1} = (1-L)X_t $$
+Where $$  Y_t = (1-L)X_t$$
+ARIMA(p, d, q) full model
+$$  (1-\sum^p_{k=1}\alpha_kL^k)(1-L)^dX_t = (1+\sum^q_{k=1}\beta_kL^k)\varepsilon_t   $$
+  
+  ARIMAX model 
+$$\Delta y_t=\alpha_0+\sum_{j}\alpha_j \Delta y_{t-j}+\sum_h\gamma_h\epsilon_{t-h}+X\beta+\epsilon_t   $$
+```{r, echo=TRUE}
+fit_ARIMA <- auto.arima(RSXFSNtimeseries, d=1, D=1, stepwise = FALSE, approximation = FALSE)
+checkresiduals(fit_ARIMA)
+```
+  
+  We have a residual standard error (residual) = 196.20, what mean for the exact month the years before, which missing on average 196.20 million.
+  
+  At this stage, we can conclude that the ARIMA model offers the best fit base on residual and standard deviations.
+
+
+The Ljung-Box test
+Test results interpretation: 
+The p-value is higher than the rejection criteria, but the ARIMA model performs better than the seasonal naive and ETS models.
+
+##### Discussion
+Having capacity for applying and Understanding complex models is a plus value for any business or forecasting team. Procurement material for manufacturing, distributions and strategic investments are al base on the capacity to forecast sales. Accuracy in short-term sales forecast has the critical impact on all operational planning. Accuracy on long-term forecasting, contribute for supporting the significant investment decision. In the end, short-term and long-term forecast accuracy will have a significant impact to optimize the growth of the company. Lousy forecasting can reduce company capacity for expansions.
+
+# 4.4 Neural network models
+  In this analysis, we explore and test the predictions capacity using artificial neural network architecture. This model allows complex nonlinear relationships between the response variable and its predictors. Our time series are mostly linear, and in this case, the neural network is maybe not the most appropriate model, but we will compare performance again seasonal naive, ETS and ARIMA.
+  
+  In neural network the inputs of each node are combinde using a weighted linear combination. For exemple the inputs (for 4 inputs) into hidden neuron j are combined linearly to give
+  $$  z_j = b_j+\sum_{i=1}^4 w_i,_jx_i     $$
+and in the hidden layer,this is then modified using a nonlinear function such as a sigmoid,
+$$  s(z) = \frac{1}{1=e^-z,  $$
+
+```{r, echo=TRUE}
+NNL <- nnetar(RSXFSNtimeseries)
+NN <- nnetar(RSXFSNtimeseries, lambda="auto")
+checkresiduals(NNL)
+accuracy(NN)
+```  
+ 
+  This very complex model demonstrate dramatic performance, which we will discuss further.
+If we based our models' comparison only on ACF graphic, we could conclude that the NN model performs relatively at best, but we observe high autocorrelation at lag 12, which suggest a clear pattern. In the ACF graph mostly all, black lines, are in ours confidence blue lines forks, which is very good.
+
+##### Discussion  
+  Recently Neural network and deep-learning become a mature technology, ready to be implemented in different industries. Deep-learning will be an excellent technology tool to apply in forecasting and we can see the strong performance of those tools. The major problem that comes with this technology is the capacity for understanding deeply those models to understand how it works and where it could be applied. There is a lack of deep-learning expert, so it will be essential to invest time in understanding this technology applied in forecasting.
+
+# 4.6 Comparative forecast performance
+  We will compare those forecast models performances with using two strategies.
+  
+  First strategy:
+  We will compare the indicators produced by the output of the accuracy() function when all the time series is the training set.
+  
+  Second strategy: 
+  Like the first strategy, we will compare the indexes produce by the output of the accuracy() function but we will split the dataset by creating, one training set and one test set.
+  
+  It is important to use the right tool for an accurate analysis and for understanding the impact on the results when a different strategy is used.
+  
+  We will base ours performance comparison model analysis on those indexes which will we define it before we use it.
+  
+Mean absolute error: MAE
+$$ MAE=mean(e^2_{t})  $$
+Root mean squared error: RMSE
+$$ e_{t}={y}_{t}-\hat{y}_{t|N} $$
+$$ RMSE=\sqrt{mean(e^2_{t})}  $$
+Mean absolute percentage error: MAPE 
+$$ p_{t}=100e_{t}/y_{t} $$
+$$ MAPE=mean(|p_{t}|) $$ 
+Mean absolute scaled error: MASE
+$$ q_{t}= e_{t}/Q $$
+Where Q is a scaling statistic computed on the training data.
+$$ MASE=mean(|q_{j}|) $$
+
+Autocorrelation of errors at lag 1 (ACF1)
+$$ ACF=\frac{Covariance(x_{t},x_{t-h})}{Variance(x_{t})} $$
+First strategy results:
+Tables comparaision for the first three models
+```{r, echo=TRUE}
+#Seasonal Naive model
+accuracy(fit_SN)
+# ETS model
+accuracy(fit_ets)
+# ARIMA model
+accuracy(fit_ARIMA)
+# Neural Network
+accuracy(NN)
+```
+
+  Based on the comparison of the error terms, MAE, RMSE and on MAPE criteria which have the advantage of being unit-free, the neural network models had the best performance by reaching the lower value for all indicator except for the ACF1. Based on RMSE which is also widely used to compare forecast models performance, what mean for the exact month the years before, they missing on average the RMSE value, we observe a higher level of accuracy from the ARIMA to the NN model. If we analyze the autocorrelation function ACF1, ARIMA model performs better 0.00667003, but NN has acceptable ACF1 results -0.01828772. NN have essential autocorrelation problem at lag 12 which we can potentially make the corrections. 
+  
+  
+Second strategy results:
+```{r, echo=TRUE}
+Daily_sales_model <- window(x = RSXFSNtimeseries, start=c(1992), end=c(2004))
+Daily_sales_test <- window(x = RSXFSNtimeseries, start=c(2004))
+# ETS model
+fit_ets_plus <- ets(Daily_sales_model)
+Daily_sales_ETS_fc <- forecast(fit_ets_plus, h=24)
+accuracy(Daily_sales_ETS_fc, Daily_sales_test)
+```
+
+```{r, echo=TRUE}
+# ARIMA model
+fit_ARIMA_plus <- auto.arima(Daily_sales_model, d=1, D=1, stepwise = FALSE, approximation = FALSE)
+Daily_sales_ARIMA_fc <- forecast(fit_ARIMA_plus, h=24)
+accuracy(Daily_sales_ARIMA_fc, Daily_sales_test)
+```
+
+```{r, echo=TRUE}
+# NN model
+Daily_sales_nnetar_auto <- nnetar(Daily_sales_model)
+Daily_sales_nnetar_fc <- forecast(Daily_sales_nnetar_auto, h=24)
+accuracy(Daily_sales_nnetar_fc, Daily_sales_test)
+```
+
+
+By applying this second comparative performance forecast strategy, I observed that if we split a time series to make a training set and a test set and compare the accuracy output it can induce to the wrong conclusion. A time series with a significant shock will distort the accuracy results. Based on this second strategy results ARIMA model performs globally better than NN model, which have lower ACF1 than ARIMA. 
+
+# 5. Make the forecast for the next 2 years
+  
+  Finally, we will make our forecast for the next 24 months, with the most accurate and performance model. Based on our analysis we chose the NN model.
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+NN <- nnetar(RSXFSNtimeseries, lambda="auto", decay=0.5, maxit=150)
+facst <- forecast(NN, lambda="auto", h=24)
+autoplot(facst, include = 60)
+print(summary(fcast))
+```
+# 6. Conclusion
+This analysis compares the performance of some principal forecasting models used across different industries including one recently added neural network model. All details can potentially have a major impact on the forecast and on the decision made by a company. The accurate forecast will optimize the growth potential of any company.    
+ 
+# 7. Markdown report
+ Create markdown report with R Studio gives the opportunity to present results analysis in more convenient format to ours working partner without having specific knowledge about forecasting but who will use the forecast output for taking decisions.
