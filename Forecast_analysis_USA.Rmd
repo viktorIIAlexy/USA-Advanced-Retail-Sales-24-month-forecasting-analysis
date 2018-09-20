@@ -190,7 +190,7 @@ RSXFSNMA11 <- ma(RSXFSNtimeseries,order=11)
 plot(RSXFSNMA11)
 ```
  
-#### Conclusion of preliminary data decomposition 
+### Conclusion of preliminary data decomposition 
 
   After this first analysis, we observed that our time series, has a positive trend, are affected by some seasonality and are affected by autocorrelation. While the series is affected by a shock around years 2008, which can also be interpreted as the end of a cycle.
   
